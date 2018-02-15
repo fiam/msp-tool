@@ -130,18 +130,6 @@ func main() {
 			}
 		}
 	}()
-	/*	mspFrames := make(chan *mspFrame)
-		go func() {
-			for {
-				frame, err := m.ReadFrame()
-				if err == nil {
-					mspFrames <- frame
-				} else {
-					//panic(err)
-				}
-			}
-		}()
-	*/
 	// main loop
 	loop := func() {
 		for {

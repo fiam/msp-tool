@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -31,6 +32,7 @@ type FC struct {
 	versionMinor byte
 	versionPatch byte
 	boardID      string
+	targetName   string
 }
 
 // NewFC returns a new FC using the given port and baud rate. stdout is
@@ -82,7 +84,11 @@ func (f *FC) printf(format string, a ...interface{}) (int, error) {
 
 func (f *FC) printInfo() {
 	if f.variant != "" && f.versionMajor != 0 && f.boardID != "" {
-		f.printf("%s %d.%d.%d (board %s)\n", f.variant, f.versionMajor, f.versionMinor, f.versionPatch, f.boardID)
+		targetName := ""
+		if f.targetName != "" {
+			targetName = ", target " + f.targetName
+		}
+		f.printf("%s %d.%d.%d (board %s%s)\n", f.variant, f.versionMajor, f.versionMinor, f.versionPatch, f.boardID, targetName)
 	}
 }
 
@@ -99,7 +105,17 @@ func (f *FC) handleFrame(fr *MSPFrame) {
 		f.versionPatch = fr.Byte(2)
 		f.printInfo()
 	case mspBoardInfo:
-		f.boardID = string(fr.Payload)
+		// BoardID is always 4 characters
+		f.boardID = string(fr.Payload[:4])
+		// Then 3 bytes follow, HW revision (uint16) and builtin OSD type (uint8), we ignore
+		// them here. Finally, in recent BF and iNAV versions, the length of the targetName (uint8)
+		// followed by the target name itself is sent. Try to retrieve it.
+		if len(fr.Payload) >= 8 {
+			targetNameLength := int(fr.Payload[7])
+			if len(fr.Payload) > 7+targetNameLength {
+				f.targetName = string(fr.Payload[8 : 8+targetNameLength])
+			}
+		}
 		f.printInfo()
 	case mspBuildInfo:
 		buildDate := string(fr.Payload[:11])
@@ -141,8 +157,21 @@ func (f *FC) StartUpdating() {
 	}
 }
 
+// HasDetectedTargetName returns true iff the target name installed on
+// the board has been retrieved via MSP.
+func (f *FC) HasDetectedTargetName() bool {
+	return f.targetName != ""
+}
+
 // Flash compiles the given target and flashes the board
 func (f *FC) Flash(srcDir string, targetName string) error {
+	if targetName == "" {
+		targetName = f.targetName
+
+		if targetName == "" {
+			return errors.New("empty target name")
+		}
+	}
 	// First, check that dfu-util is available
 	dfu, err := exec.LookPath("dfu-util")
 	if err != nil {
@@ -288,4 +317,5 @@ func (f *FC) reset() {
 	f.versionMinor = 0
 	f.versionPatch = 0
 	f.boardID = ""
+	f.targetName = ""
 }

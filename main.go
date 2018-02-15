@@ -16,7 +16,7 @@ var (
 	portName   = flag.String("p", "", "Serial port")
 	baudRate   = flag.Int("b", 115200, "Baud rate")
 	sourceDir  = flag.String("s", ".", "Path to the directory with the firmware source code")
-	targetName = flag.String("t", "", "Target name")
+	targetName = flag.String("t", "", "Target name. Optional if the firmware reports it via MSP")
 
 	inputSigInt = byte(3) // ctrl+c
 )
@@ -142,7 +142,7 @@ func main() {
 				case 'h':
 					printHelp(km)
 				case 'f':
-					if *targetName == "" {
+					if *targetName == "" && !fc.HasDetectedTargetName() {
 						fmt.Fprintf(km, "missing target name, specify one with -t\n")
 						break
 					}

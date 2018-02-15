@@ -199,66 +199,9 @@ func (m *MSP) ReadFrame() (*MSPFrame, error) {
 	}
 }
 
-/*
-func main() {
-	opts := &serial.Config{
-		Name:        os.Args[1],
-		Baud:        115200,
-		ReadTimeout: time.Second * 3,
-	}
-	port, err := serial.OpenPort(opts)
-	if err != nil {
-		log.Fatalf("serial.Open: %v", err)
-	}
-	defer port.Close()
-
-	encode := mspV1Encode
-	expectedRespLength := 6
-	if len(os.Args) > 2 && os.Args[2] == "2" {
-		encode = mspV2Encode
-		expectedRespLength = 9
-		fmt.Println("using MSPv2")
-	} else {
-		fmt.Println("using MSPv1")
-	}
-	v := expectedRespLength
-	for v < 66 {
-		//cmd := byte(1) // MSP_API_VERSION
-		cmd := byte(87) // MSP_OSD_CHAR_WRITE
-		//if v != 0 {
-		//	cmd = byte(87) // MSP_OSD_CHAR_WRITE
-		//}
-		data := encode(cmd, v)
-		fmt.Printf("will send %d bytes: %v\n", len(data), data)
-		n, err := port.Write(data)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		if err := port.Flush(); err != nil {
-			fmt.Println(err)
-			continue
-		}
-		fmt.Printf("did send %d bytes\n", n)
-		b := make([]byte, expectedRespLength)
-		nn := 0
-		time.Sleep(100 * time.Millisecond)
-		for jj := 0; jj < 3 && nn < len(b); jj++ {
-			nn = 0
-			for nn < len(b) {
-				n, err := port.Read(b[nn:])
-				if err != nil {
-					fmt.Println(b)
-					fmt.Println(err)
-					break
-				}
-				nn += n
-			}
-		}
-		if nn < len(b) {
-			continue
-		}
-		fmt.Printf("got response %d bytes: %v\n", nn, b)
-		v++
-	}
-}*/
+// RebootIntoBootloader reboots the board into bootloader mode
+func (m *MSP) RebootIntoBootloader() (int, error) {
+	// reboot_character is 'R' by default, but it can be changed
+	// TODO: Retrieve it if possible (in inav it can be done via MSPv2)
+	return m.port.Write([]byte{'R'})
+}

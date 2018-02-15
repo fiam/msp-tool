@@ -104,7 +104,8 @@ func (f *FC) handleFrame(fr *MSPFrame) {
 	case mspBuildInfo:
 		buildDate := string(fr.Payload[:11])
 		buildTime := string(fr.Payload[11:19])
-		rev := string(fr.Payload[19:27])
+		// XXX: Revision is 8 characters in iNav but 7 in BF/CF
+		rev := string(fr.Payload[19:])
 		f.printf("Build %s (built on %s @ %s)\n", rev, buildDate, buildTime)
 	case mspDebugMsg:
 		s := strings.Trim(string(fr.Payload), " \r\n\t\x00")

@@ -107,13 +107,14 @@ func (f *FC) handleFrame(fr *MSPFrame) {
 	case mspBoardInfo:
 		// BoardID is always 4 characters
 		f.boardID = string(fr.Payload[:4])
-		// Then 3 bytes follow, HW revision (uint16) and builtin OSD type (uint8), we ignore
-		// them here. Finally, in recent BF and iNAV versions, the length of the targetName (uint8)
-		// followed by the target name itself is sent. Try to retrieve it.
-		if len(fr.Payload) >= 8 {
-			targetNameLength := int(fr.Payload[7])
-			if len(fr.Payload) > 7+targetNameLength {
-				f.targetName = string(fr.Payload[8 : 8+targetNameLength])
+		// Then 4 bytes follow, HW revision (uint16), builtin OSD type (uint8) and wether
+		// the board uses VCP (uint8), We ignore those bytes here. Finally, in recent BF
+		// and iNAV versions, the length of the targetName (uint8) followed by the target
+		// name itself is sent. Try to retrieve it.
+		if len(fr.Payload) >= 9 {
+			targetNameLength := int(fr.Payload[8])
+			if len(fr.Payload) > 8+targetNameLength {
+				f.targetName = string(fr.Payload[9 : 9+targetNameLength])
 			}
 		}
 		f.printInfo()

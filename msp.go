@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"reflect"
 
 	"github.com/tarm/serial"
 )
@@ -15,9 +17,26 @@ const (
 	mspBoardInfo  = 4
 	mspBuildInfo  = 5
 
+	mspFeature    = 36
+	mspSetFeature = 37
+
+	mspCFSerialConfig    = 54
+	mspSetCFSerialConfig = 55
+
 	mspReboot = 68
 
+	mspEepromWrite = 250
+
 	mspDebugMsg = 253
+)
+
+const (
+	mspFCFeatureDebugTrace = 1 << 31
+)
+
+const (
+	serialFunctionMSP        = 1 << 0
+	serialFunctionDebugTrace = 1 << 15
 )
 
 func mspV1Encode(cmd byte, data []byte) []byte {
@@ -86,12 +105,56 @@ type MSP struct {
 }
 
 type MSPFrame struct {
-	Code    uint16
-	Payload []byte
+	Code       uint16
+	Payload    []byte
+	payloadPos int
 }
 
 func (f *MSPFrame) Byte(idx int) byte {
 	return f.Payload[idx]
+}
+
+// Reads out from the frame Payload and advances the payload
+// position pointer by the size of the variable pointed by out.
+func (f *MSPFrame) Read(out interface{}) error {
+	switch x := out.(type) {
+	case *uint8:
+		if f.BytesRemaining() < 1 {
+			return io.EOF
+		}
+		*x = f.Payload[f.payloadPos]
+		f.payloadPos++
+	case *uint16:
+		if f.BytesRemaining() < 2 {
+			return io.EOF
+		}
+		*x = binary.LittleEndian.Uint16(f.Payload[f.payloadPos:])
+		f.payloadPos += 2
+	case *uint32:
+		if f.BytesRemaining() < 4 {
+			return io.EOF
+		}
+		*x = binary.LittleEndian.Uint32(f.Payload[f.payloadPos:])
+		f.payloadPos += 4
+	default:
+		v := reflect.ValueOf(out)
+		if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.Struct {
+			elem := v.Elem()
+			for ii := 0; ii < elem.NumField(); ii++ {
+				field := elem.Field(ii).Addr()
+				if err := f.Read(field.Interface()); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		panic(fmt.Errorf("can't decode MSP payload into type %T", out))
+	}
+	return nil
+}
+
+func (f *MSPFrame) BytesRemaining() int {
+	return len(f.Payload) - f.payloadPos
 }
 
 func NewMSP(portName string, baudRate int) (*MSP, error) {
@@ -110,7 +173,45 @@ func NewMSP(portName string, baudRate int) (*MSP, error) {
 	}, nil
 }
 
-func (m *MSP) WriteCmd(cmd uint16, data []byte) (int, error) {
+func (m *MSP) encodeArgs(w *bytes.Buffer, args ...interface{}) error {
+	for _, arg := range args {
+		switch x := arg.(type) {
+		case uint8:
+			w.WriteByte(x)
+		case uint16:
+			binary.Write(w, binary.LittleEndian, x)
+		case uint32:
+			binary.Write(w, binary.LittleEndian, x)
+		default:
+			v := reflect.ValueOf(arg)
+			if v.Kind() == reflect.Slice {
+				for ii := 0; ii < v.Len(); ii++ {
+					if err := m.encodeArgs(w, v.Index(ii).Interface()); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			if v.Kind() == reflect.Struct {
+				for ii := 0; ii < v.NumField(); ii++ {
+					if err := m.encodeArgs(w, v.Field(ii).Interface()); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			panic(fmt.Errorf("can't encode MSP value of type %T", arg))
+		}
+	}
+	return nil
+}
+
+func (m *MSP) WriteCmd(cmd uint16, args ...interface{}) (int, error) {
+	var buf bytes.Buffer
+	if err := m.encodeArgs(&buf, args...); err != nil {
+		return -1, err
+	}
+	data := buf.Bytes()
 	frame := mspV1Encode(byte(cmd), data)
 	return m.port.Write(frame)
 }
@@ -138,8 +239,9 @@ func (m *MSP) readMSPV1Frame() (*MSPFrame, error) {
 	}
 	// crc := buf[0]
 	return &MSPFrame{
-		Code:    uint16(cmd),
-		Payload: payload,
+		Code:       uint16(cmd),
+		Payload:    payload,
+		payloadPos: 0,
 	}, nil
 }
 
@@ -168,8 +270,9 @@ func (m *MSP) readMSPV2Frame() (*MSPFrame, error) {
 	}
 	// crc := buf[0]
 	return &MSPFrame{
-		Code:    code,
-		Payload: payload,
+		Code:       code,
+		Payload:    payload,
+		payloadPos: 0,
 	}, nil
 }
 

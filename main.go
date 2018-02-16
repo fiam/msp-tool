@@ -13,10 +13,11 @@ import (
 )
 
 var (
-	portName   = flag.String("p", "", "Serial port")
-	baudRate   = flag.Int("b", 115200, "Baud rate")
-	sourceDir  = flag.String("s", ".", "Path to the directory with the firmware source code")
-	targetName = flag.String("t", "", "Target name. Optional if the firmware reports it via MSP")
+	portName              = flag.String("p", "", "Serial port")
+	baudRate              = flag.Int("b", 115200, "Baud rate")
+	sourceDir             = flag.String("s", ".", "Path to the directory with the firmware source code")
+	targetName            = flag.String("t", "", "Target name. Optional if the firmware reports it via MSP")
+	doNotEnableDebugTrace = flag.Bool("no-debug-trace", false, "Do not enable DEBUG_TRACE automatically")
 
 	inputSigInt = byte(3) // ctrl+c
 )
@@ -109,7 +110,13 @@ func main() {
 
 	defer km.Close()
 
-	fc, err := NewFC(*portName, *baudRate, km)
+	opts := FCOptions{
+		PortName:         *portName,
+		BaudRate:         *baudRate,
+		Stdout:           km,
+		EnableDebugTrace: !*doNotEnableDebugTrace,
+	}
+	fc, err := NewFC(opts)
 	if err != nil {
 		km.Close()
 		log.Fatal(err)

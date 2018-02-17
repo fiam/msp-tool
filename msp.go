@@ -308,3 +308,15 @@ func (m *MSP) RebootIntoBootloader() (int, error) {
 	// TODO: Retrieve it if possible (in inav it can be done via MSPv2)
 	return m.port.Write([]byte{'R'})
 }
+
+// Close closes the underlying serial port. Note that reading from or
+// writing to a closed MSP will cause a panic.
+func (m *MSP) Close() error {
+	var err error
+	if m.port != nil {
+		if err = m.port.Close(); err == nil {
+			m.port = nil
+		}
+	}
+	return err
+}

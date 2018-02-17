@@ -64,6 +64,10 @@ func NewFC(opts FCOptions) (*FC, error) {
 }
 
 func (f *FC) reconnect() error {
+	if f.msp != nil {
+		f.msp.Close()
+		f.msp = nil
+	}
 	for {
 		msp, err := NewMSP(f.opts.PortName, f.opts.BaudRate)
 		if err == nil {

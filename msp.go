@@ -148,6 +148,15 @@ func (f *MSPFrame) Read(out interface{}) error {
 			}
 			return nil
 		}
+		if v.Kind() == reflect.Slice {
+			for ii := 0; ii < v.Len(); ii++ {
+				elem := v.Index(ii)
+				if err := f.Read(elem.Addr().Interface()); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 		panic(fmt.Errorf("can't decode MSP payload into type %T", out))
 	}
 	return nil

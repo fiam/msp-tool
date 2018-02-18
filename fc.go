@@ -32,6 +32,9 @@ type FC struct {
 	boardID      string
 	targetName   string
 	features     uint32
+	channelMap   []uint8
+	rxTicker     *time.Ticker
+	sticks       rxSticks
 }
 
 type FCOptions struct {
@@ -59,6 +62,7 @@ func NewFC(opts FCOptions) (*FC, error) {
 		opts: opts,
 		msp:  msp,
 	}
+	fc.reset()
 	fc.updateInfo()
 	return fc, nil
 }
@@ -90,6 +94,7 @@ func (f *FC) updateInfo() {
 	f.msp.WriteCmd(mspBuildInfo)
 	f.msp.WriteCmd(mspFeature)
 	f.msp.WriteCmd(mspCFSerialConfig)
+	f.msp.WriteCmd(mspRXMap)
 }
 
 func (f *FC) printf(format string, a ...interface{}) (int, error) {
@@ -106,7 +111,7 @@ func (f *FC) printInfo() {
 	}
 }
 
-func (f *FC) handleFrame(fr *MSPFrame) {
+func (f *FC) handleFrame(fr *MSPFrame) error {
 	switch fr.Code {
 	case mspAPIVersion:
 		f.printf("MSP API version %d.%d (protocol %d)\n", fr.Byte(1), fr.Byte(2), fr.Byte(0))
@@ -181,6 +186,11 @@ func (f *FC) handleFrame(fr *MSPFrame) {
 				f.msp.WriteCmd(mspEepromWrite)
 			}
 		}
+	case mspRXMap:
+		f.channelMap = make([]uint8, 8)
+		if err := fr.Read(f.channelMap); err != nil {
+			return err
+		}
 	case mspReboot:
 		f.printf("Rebooting board...\n")
 	case mspDebugMsg:
@@ -188,11 +198,13 @@ func (f *FC) handleFrame(fr *MSPFrame) {
 		f.printf("[DEBUG] %s\n", s)
 	case mspSetFeature:
 	case mspSetCFSerialConfig:
+	case mspSetRawRC:
 	case mspEepromWrite:
 		// Nothing to do for these
 	default:
 		f.printf("Unhandled MSP frame %d with payload %v\n", fr.Code, fr.Payload)
 	}
+	return nil
 }
 
 func (f *FC) versionGte(major, minor, patch byte) bool {
@@ -309,6 +321,35 @@ func (f *FC) Flash(srcDir string, targetName string) error {
 	return f.dfuFlash(dfu, binaryPath)
 }
 
+func (f *FC) IsSimulatingRX() bool {
+	return f.rxTicker != nil
+}
+
+func (f *FC) ToggleRXSimulation() (enabled bool, err error) {
+	if f.rxTicker != nil {
+		f.rxTicker.Stop()
+		f.rxTicker = nil
+	} else {
+		f.rxTicker = time.NewTicker(10 * time.Millisecond)
+		go func(t *time.Ticker) {
+			for range t.C {
+				f.sticks.Update()
+				msp := f.msp
+				if msp == nil {
+					continue
+				}
+				msp.WriteCmd(mspSetRawRC, f.sticks.ToMSP(f.channelMap))
+			}
+		}(f.rxTicker)
+		enabled = true
+	}
+	return enabled, err
+}
+
+func (f *FC) RX() RX {
+	return &f.sticks
+}
+
 // Reboots the board into the bootloader for flashing
 func (f *FC) dfuReboot() error {
 	_, err := f.msp.RebootIntoBootloader()
@@ -395,4 +436,15 @@ func (f *FC) reset() {
 	f.boardID = ""
 	f.targetName = ""
 	f.features = 0
+	f.channelMap = nil
+	if f.rxTicker != nil {
+		f.rxTicker.Stop()
+		f.rxTicker = nil
+	}
+	f.sticks = rxSticks{
+		Roll:     rxMid,
+		Pitch:    rxMid,
+		Yaw:      rxMid,
+		Throttle: rxMid,
+	}
 }

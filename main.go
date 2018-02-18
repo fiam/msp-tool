@@ -22,6 +22,13 @@ var (
 	inputSigInt = byte(3) // ctrl+c
 )
 
+const (
+	kmArrowLeft  = 252
+	kmArrowRight = 253
+	kmArrowDown  = 254
+	kmArrowUp    = 255
+)
+
 type keyboardMonitor struct {
 	t     *term.Term
 	isRaw bool
@@ -52,8 +59,13 @@ func (km *keyboardMonitor) Get() (byte, error) {
 	km.mu.Unlock()
 	if t != nil && isRaw {
 		buf := make([]byte, 3)
-		if _, err := t.Read(buf); err != nil {
+		n, err := t.Read(buf)
+		if err != nil {
 			return 0, err
+		}
+		if n == 3 && buf[0] == 27 && buf[1] == 91 {
+			// Arrow key
+			return 255 - (buf[2] - 65), nil
 		}
 		return buf[0], nil
 	}
@@ -89,10 +101,37 @@ Available commands:
 h	Print this help
 f	Build the firmware and flash the board
 r	Reboot the board
+R	Toggle RX simulation
 q	Quit
 
 `
 	fmt.Fprint(w, help)
+}
+
+func handleRXSimulation(fc *FC, key byte) bool {
+	var rxKey RXKey
+	switch key {
+	case 'w':
+		rxKey = RXKeyW
+	case 'a':
+		rxKey = RXKeyA
+	case 's':
+		rxKey = RXKeyS
+	case 'd':
+		rxKey = RXKeyD
+	case kmArrowUp:
+		rxKey = RXKeyUp
+	case kmArrowLeft:
+		rxKey = RXKeyLeft
+	case kmArrowDown:
+		rxKey = RXKeyDown
+	case kmArrowRight:
+		rxKey = RXKeyRight
+	default:
+		return false
+	}
+	fc.RX().Keypress(rxKey)
+	return true
 }
 
 func main() {
@@ -142,6 +181,9 @@ func main() {
 		for {
 			select {
 			case k := <-input:
+				if fc.IsSimulatingRX() && handleRXSimulation(fc, k) {
+					break
+				}
 				switch k {
 				case inputSigInt:
 					km.Close()
@@ -159,6 +201,16 @@ func main() {
 				case 'r':
 					// Reboot the board
 					fc.Reboot()
+				case 'R':
+					enabled, err := fc.ToggleRXSimulation()
+					if err != nil {
+						log.Fatal(err)
+					}
+					if enabled {
+						fmt.Fprintf(km, "Starting RX simulation. Use WASD and arrow keys to control sticks. Press R again to disable.\n")
+					} else {
+						fmt.Fprintf(km, "Stopping RX simulation\n")
+					}
 				case 'q':
 					// Quit
 					return

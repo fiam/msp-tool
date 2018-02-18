@@ -23,7 +23,11 @@ const (
 	mspCFSerialConfig    = 54
 	mspSetCFSerialConfig = 55
 
+	mspRXMap = 64
+
 	mspReboot = 68
+
+	mspSetRawRC = 200
 
 	mspEepromWrite = 250
 

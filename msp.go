@@ -80,13 +80,13 @@ func mspV2Encode(cmd byte, totalLength int) []byte {
 	}
 	crc := byte(0)
 	for _, v := range buf.Bytes()[3:] {
-		crc = crc8_dvb_s2(crc, v)
+		crc = crc8DvbS2(crc, v)
 	}
 	buf.WriteByte(crc)
 	return buf.Bytes()
 }
 
-func crc8_dvb_s2(crc, a byte) byte {
+func crc8DvbS2(crc, a byte) byte {
 	crc ^= a
 	for ii := 0; ii < 8; ii++ {
 		if (crc & 0x80) != 0 {

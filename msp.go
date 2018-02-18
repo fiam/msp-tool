@@ -166,6 +166,35 @@ func (f *MSPFrame) BytesRemaining() int {
 	return len(f.Payload) - f.payloadPos
 }
 
+type MSPError interface {
+	error
+	IsMSPError() bool
+}
+
+type mspChecksumErr struct {
+	code             uint16
+	payload          []byte
+	checksum         uint8
+	expectedChecksum uint8
+}
+
+func (e *mspChecksumErr) Checksum() uint8         { return e.checksum }
+func (e *mspChecksumErr) ExpectedChecksum() uint8 { return e.expectedChecksum }
+func (e *mspChecksumErr) IsMSPError() bool        { return true }
+func (e *mspChecksumErr) Error() string {
+	return fmt.Sprintf("invalid CRC 0x%02x, expecting 0x%02x in cmd %v with payload %v",
+		e.checksum, e.expectedChecksum, e.code, e.payload)
+}
+
+type mspOOBErr struct {
+	b byte
+}
+
+func (e *mspOOBErr) IsMSPError() bool { return true }
+func (e *mspOOBErr) Error() string {
+	return fmt.Sprintf("out of band MSP byte 0x%02x", e.b)
+}
+
 func NewMSP(portName string, baudRate int) (*MSP, error) {
 	opts := &serial.Config{
 		Name: portName,
@@ -233,20 +262,34 @@ func (m *MSP) readMSPV1Frame() (*MSPFrame, error) {
 	if buf[0] != '<' && buf[0] != '>' {
 		return nil, fmt.Errorf("invalid MSP direction char 0x%02x", buf[0])
 	}
+	ccrc := byte(0)
+	ccrc ^= buf[1]
+	ccrc ^= buf[2]
 	var payload []byte
 	payloadLength := int(buf[1])
+	cmd := buf[2]
 	if payloadLength > 0 {
 		payload = make([]byte, payloadLength)
 		if _, err := io.ReadFull(m.port, payload); err != nil {
 			return nil, err
 		}
+		for _, b := range payload {
+			ccrc ^= b
+		}
 	}
-	cmd := buf[2]
 	buf = buf[:1]
 	if _, err := m.port.Read(buf); err != nil {
 		return nil, err
 	}
-	// crc := buf[0]
+	crc := buf[0]
+	if crc != ccrc {
+		return nil, &mspChecksumErr{
+			code:             uint16(cmd),
+			payload:          payload,
+			checksum:         crc,
+			expectedChecksum: ccrc,
+		}
+	}
 	return &MSPFrame{
 		Code:       uint16(cmd),
 		Payload:    payload,
@@ -296,6 +339,7 @@ func (m *MSP) ReadFrame() (*MSPFrame, error) {
 			// Frame start
 			break
 		}
+		return nil, &mspOOBErr{b: buf[0]}
 	}
 	_, err := m.port.Read(buf)
 	if err != nil {

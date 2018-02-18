@@ -223,6 +223,10 @@ func (f *FC) StartUpdating() {
 				}
 				continue
 			}
+			if merr, ok := err.(MSPError); ok && merr.IsMSPError() {
+				f.printf("%v\n", err)
+				continue
+			}
 			panic(err)
 		}
 		f.handleFrame(frame)

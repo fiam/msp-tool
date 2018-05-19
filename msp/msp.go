@@ -1,4 +1,4 @@
-package main
+package msp
 
 import (
 	"bytes"
@@ -11,36 +11,36 @@ import (
 )
 
 const (
-	mspAPIVersion = 1
-	mspFCVariant  = 2
-	mspFCVersion  = 3
-	mspBoardInfo  = 4
-	mspBuildInfo  = 5
+	MspAPIVersion = 1
+	MspFCVariant  = 2
+	MspFCVersion  = 3
+	MspBoardInfo  = 4
+	MspBuildInfo  = 5
 
-	mspFeature    = 36
-	mspSetFeature = 37
+	MspFeature    = 36
+	MspSetFeature = 37
 
-	mspCFSerialConfig    = 54
-	mspSetCFSerialConfig = 55
+	MspCFSerialConfig    = 54
+	MspSetCFSerialConfig = 55
 
-	mspRXMap = 64
+	MspRXMap = 64
 
-	mspReboot = 68
+	MspReboot = 68
 
-	mspSetRawRC = 200
+	MspSetRawRC = 200
 
-	mspEepromWrite = 250
+	MspEepromWrite = 250
 
-	mspDebugMsg = 253
+	MspDebugMsg = 253
 )
 
 const (
-	mspFCFeatureDebugTrace = 1 << 31
+	MspFCFeatureDebugTrace = 1 << 31
 )
 
 const (
-	serialFunctionMSP        = 1 << 0
-	serialFunctionDebugTrace = 1 << 15
+	SerialFunctionMSP        = 1 << 0
+	SerialFunctionDebugTrace = 1 << 15
 )
 
 func mspV1Encode(cmd byte, data []byte) []byte {

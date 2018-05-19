@@ -9,6 +9,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/fiam/msp-tool/fc"
+	"github.com/fiam/msp-tool/rx"
 	"github.com/pkg/term"
 )
 
@@ -108,25 +110,25 @@ q	Quit
 	fmt.Fprint(w, help)
 }
 
-func handleRXSimulation(fc *FC, key byte) bool {
-	var rxKey RXKey
+func handleRXSimulation(fc *fc.FC, key byte) bool {
+	var rxKey rx.RXKey
 	switch key {
 	case 'w':
-		rxKey = RXKeyW
+		rxKey = rx.RXKeyW
 	case 'a':
-		rxKey = RXKeyA
+		rxKey = rx.RXKeyA
 	case 's':
-		rxKey = RXKeyS
+		rxKey = rx.RXKeyS
 	case 'd':
-		rxKey = RXKeyD
+		rxKey = rx.RXKeyD
 	case kmArrowUp:
-		rxKey = RXKeyUp
+		rxKey = rx.RXKeyUp
 	case kmArrowLeft:
-		rxKey = RXKeyLeft
+		rxKey = rx.RXKeyLeft
 	case kmArrowDown:
-		rxKey = RXKeyDown
+		rxKey = rx.RXKeyDown
 	case kmArrowRight:
-		rxKey = RXKeyRight
+		rxKey = rx.RXKeyRight
 	default:
 		return false
 	}
@@ -149,13 +151,13 @@ func main() {
 
 	defer km.Close()
 
-	opts := FCOptions{
+	opts := fc.FCOptions{
 		PortName:         *portName,
 		BaudRate:         *baudRate,
 		Stdout:           km,
 		EnableDebugTrace: !*doNotEnableDebugTrace,
 	}
-	fc, err := NewFC(opts)
+	fc, err := fc.NewFC(opts)
 	if err != nil {
 		km.Close()
 		log.Fatal(err)

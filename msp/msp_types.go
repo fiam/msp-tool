@@ -1,4 +1,4 @@
-package main
+package msp
 
 type MSPSerialConfig struct {
 	Identifier              uint8

@@ -1,4 +1,4 @@
-package main
+package rx
 
 import (
 	"sync"
@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	rxLow  = 1000
-	rxMid  = 1500
-	rxHigh = 2000
+	RxLow  = 1000
+	RxMid  = 1500
+	RxHigh = 2000
 )
 
 const (
@@ -34,7 +34,7 @@ type RX interface {
 	Keypress(key RXKey)
 }
 
-type rxSticks struct {
+type RxSticks struct {
 	Roll      uint16
 	Pitch     uint16
 	Yaw       uint16
@@ -43,7 +43,7 @@ type rxSticks struct {
 	lastPress [8]time.Time
 }
 
-func (r *rxSticks) ToMSP(channelMap []uint8) rxPayload {
+func (r *RxSticks) ToMSP(channelMap []uint8) rxPayload {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	channels := make([]uint16, 4)
@@ -56,39 +56,39 @@ func (r *rxSticks) ToMSP(channelMap []uint8) rxPayload {
 	}
 }
 
-func (r *rxSticks) Keypress(key RXKey) {
+func (r *RxSticks) Keypress(key RXKey) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	switch key {
 	case RXKeyW:
-		r.Throttle = rxHigh
+		r.Throttle = RxHigh
 		r.lastPress[RXKeyS] = time.Time{}
 	case RXKeyA:
-		r.Yaw = rxLow
+		r.Yaw = RxLow
 		r.lastPress[RXKeyD] = time.Time{}
 	case RXKeyS:
-		r.Throttle = rxLow
+		r.Throttle = RxLow
 		r.lastPress[RXKeyW] = time.Time{}
 	case RXKeyD:
-		r.Yaw = rxHigh
+		r.Yaw = RxHigh
 		r.lastPress[RXKeyA] = time.Time{}
 	case RXKeyUp:
-		r.Pitch = rxHigh
+		r.Pitch = RxHigh
 		r.lastPress[RXKeyDown] = time.Time{}
 	case RXKeyLeft:
-		r.Roll = rxLow
+		r.Roll = RxLow
 		r.lastPress[RXKeyRight] = time.Time{}
 	case RXKeyDown:
-		r.Pitch = rxLow
+		r.Pitch = RxLow
 		r.lastPress[RXKeyUp] = time.Time{}
 	case RXKeyRight:
-		r.Roll = rxHigh
+		r.Roll = RxHigh
 		r.lastPress[RXKeyRight] = time.Time{}
 	}
 	r.lastPress[key] = time.Now()
 }
 
-func (r *rxSticks) Update() {
+func (r *RxSticks) Update() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now()
@@ -100,13 +100,13 @@ func (r *rxSticks) Update() {
 			r.lastPress[ii] = time.Time{}
 			switch RXKey(ii) {
 			case RXKeyW, RXKeyS:
-				r.Throttle = rxMid
+				r.Throttle = RxMid
 			case RXKeyA, RXKeyD:
-				r.Yaw = rxMid
+				r.Yaw = RxMid
 			case RXKeyUp, RXKeyDown:
-				r.Pitch = rxMid
+				r.Pitch = RxMid
 			case RXKeyLeft, RXKeyRight:
-				r.Roll = rxMid
+				r.Roll = RxMid
 			}
 		}
 	}

@@ -27,7 +27,11 @@ const (
 
 	MspReboot = 68
 
+	MspPID = 112
+
 	MspSetRawRC = 200
+
+	MspSetPID = 202
 
 	MspEepromWrite = 250
 

@@ -22,6 +22,15 @@ const (
 	internalFlashMarker = "@Internal Flash  /"
 )
 
+type PIDReceiver interface {
+	ReceivedPID(map[string]*Pid) error
+}
+
+type Pid struct {
+	FlightSurface string
+	Value         []uint8
+}
+
 // FC represents a connection to the flight controller, which can
 // handle disconnections and reconnections on its on. Use NewFC()
 // to initialize an FC and then call FC.StartUpdating().
@@ -34,8 +43,9 @@ type FC struct {
 	versionPatch byte
 	boardID      string
 	targetName   string
-	features     uint32
+	Features     uint32
 	channelMap   []uint8
+	PidMap       map[string]*Pid
 	rxTicker     *time.Ticker
 	sticks       rx.RxSticks
 }
@@ -114,7 +124,7 @@ func (f *FC) printInfo() {
 	}
 }
 
-func (f *FC) handleFrame(fr *_msp.MSPFrame) error {
+func (f *FC) handleFrame(fr *_msp.MSPFrame, w interface{}) error {
 	switch fr.Code {
 	case _msp.MspAPIVersion:
 		f.printf("MSP API version %d.%d (protocol %d)\n", fr.Byte(1), fr.Byte(2), fr.Byte(0))
@@ -147,11 +157,11 @@ func (f *FC) handleFrame(fr *_msp.MSPFrame) error {
 		rev := string(fr.Payload[19:])
 		f.printf("Build %s (built on %s @ %s)\n", rev, buildDate, buildTime)
 	case _msp.MspFeature:
-		fr.Read(&f.features)
-		if (f.features&_msp.MspFCFeatureDebugTrace == 0) && f.shouldEnableDebugTrace() {
+		fr.Read(&f.Features)
+		if (f.Features&_msp.MspFCFeatureDebugTrace == 0) && f.shouldEnableDebugTrace() {
 			f.printf("Enabling FEATURE_DEBUG_TRACE\n")
-			f.features |= _msp.MspFCFeatureDebugTrace
-			f.msp.WriteCmd(_msp.MspSetFeature, f.features)
+			f.Features |= _msp.MspFCFeatureDebugTrace
+			f.msp.WriteCmd(_msp.MspSetFeature, f.Features)
 			f.msp.WriteCmd(_msp.MspEepromWrite)
 		}
 	case _msp.MspCFSerialConfig:
@@ -203,7 +213,40 @@ func (f *FC) handleFrame(fr *_msp.MSPFrame) error {
 	case _msp.MspSetCFSerialConfig:
 	case _msp.MspSetRawRC:
 	case _msp.MspEepromWrite:
+	case _msp.MspSetPID:
 		// Nothing to do for these
+	case _msp.MspPID:
+		pidMap := make([]uint8, 30)
+		if err := fr.Read(pidMap); err != nil {
+			return err
+		}
+
+		rollPid := &Pid{"roll", pidMap[0:3]}
+		pitchPid := &Pid{"pitch", pidMap[3:6]}
+		yawPid := &Pid{"pitch", pidMap[6:8]}
+		altPid := &Pid{"alt", pidMap[8:11]}
+		velPid := &Pid{"vel", pidMap[11:14]}
+		magPid := &Pid{"mag", pidMap[14:15]}
+		posPid := &Pid{"pos", pidMap[15:16]}
+		posRPid := &Pid{"posR", pidMap[16:19]}
+		navRPid := &Pid{"navR", pidMap[19:22]}
+
+		f.PidMap = map[string]*Pid{
+			"roll":  rollPid,
+			"pitch": pitchPid,
+			"yaw":   yawPid,
+			"alt":   altPid,
+			"vel":   velPid,
+			"mag":   magPid,
+			"pos":   posPid,
+			"posR":  posRPid,
+			"navR":  navRPid,
+		}
+
+		if pw, ok := w.(PIDReceiver); ok {
+			pw.ReceivedPID(f.PidMap)
+			return nil
+		}
 	default:
 		f.printf("Unhandled MSP frame %d with payload %v\n", fr.Code, fr.Payload)
 	}
@@ -227,7 +270,7 @@ func (f *FC) Reboot() {
 
 // StartUpdating starts reading from the MSP port and handling
 // the received messages. Note that it never returns.
-func (f *FC) StartUpdating() {
+func (f *FC) StartUpdating(w interface{}) {
 	for {
 		frame, err := f.msp.ReadFrame()
 		if err != nil {
@@ -244,7 +287,7 @@ func (f *FC) StartUpdating() {
 			}
 			panic(err)
 		}
-		f.handleFrame(frame)
+		f.handleFrame(frame, w)
 	}
 }
 
@@ -349,6 +392,19 @@ func (f *FC) ToggleRXSimulation() (enabled bool, err error) {
 	return enabled, err
 }
 
+func (f *FC) GetPIDs() (err error) {
+	f.msp.WriteCmd(_msp.MspPID)
+
+	return err
+}
+
+func (f *FC) SetPIDs(pids []uint8) (err error) {
+	f.msp.WriteCmd(_msp.MspSetPID, pids)
+	f.msp.WriteCmd(_msp.MspEepromWrite)
+
+	return err
+}
+
 func (f *FC) RX() rx.RX {
 	return &f.sticks
 }
@@ -438,7 +494,7 @@ func (f *FC) reset() {
 	f.versionPatch = 0
 	f.boardID = ""
 	f.targetName = ""
-	f.features = 0
+	f.Features = 0
 	f.channelMap = nil
 	if f.rxTicker != nil {
 		f.rxTicker.Stop()

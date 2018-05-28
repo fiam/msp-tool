@@ -98,6 +98,18 @@ func (f *FC) reconnect() error {
 	}
 }
 
+func (f *FC) Close() error {
+	if f.msp != nil {
+		err := f.msp.Close()
+		f.msp = nil
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (f *FC) updateInfo() {
 	// Send commands to print FC info
 	f.msp.WriteCmd(_msp.MspAPIVersion)

@@ -31,6 +31,9 @@ const (
 	kmArrowUp    = 255
 )
 
+type MyPIDReceiver struct {
+}
+
 type keyboardMonitor struct {
 	t     *term.Term
 	isRaw bool
@@ -167,7 +170,7 @@ func main() {
 
 	go func() {
 		defer km.Close()
-		fc.StartUpdating()
+		fc.StartUpdating(MyPIDReceiver{})
 	}()
 	input := make(chan byte)
 	go func() {

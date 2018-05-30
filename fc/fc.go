@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	_msp "github.com/fiam/msp-tool/msp"
+	"github.com/fiam/msp-tool/msp"
 	"github.com/fiam/msp-tool/rx"
 )
 
@@ -36,7 +36,7 @@ type Pid struct {
 // to initialize an FC and then call FC.StartUpdating().
 type FC struct {
 	opts         FCOptions
-	msp          *_msp.MSP
+	msp          *msp.MSP
 	variant      string
 	versionMajor byte
 	versionMinor byte
@@ -64,7 +64,7 @@ func (f *FCOptions) stderr() io.Writer {
 // NewFC returns a new FC using the given port and baud rate. stdout is
 // optional and will default to os.Stdout if nil
 func NewFC(opts FCOptions) (*FC, error) {
-	msp, err := _msp.NewMSP(opts.PortName, opts.BaudRate)
+	m, err := msp.NewMSP(opts.PortName, opts.BaudRate)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func NewFC(opts FCOptions) (*FC, error) {
 	}
 	fc := &FC{
 		opts: opts,
-		msp:  msp,
+		msp:  m,
 	}
 	fc.reset()
 	fc.updateInfo()
@@ -86,11 +86,11 @@ func (f *FC) reconnect() error {
 		f.msp = nil
 	}
 	for {
-		msp, err := _msp.NewMSP(f.opts.PortName, f.opts.BaudRate)
+		m, err := msp.NewMSP(f.opts.PortName, f.opts.BaudRate)
 		if err == nil {
 			f.printf("Reconnected to %s @ %dbps\n", f.opts.PortName, f.opts.BaudRate)
 			f.reset()
-			f.msp = msp
+			f.msp = m
 			f.updateInfo()
 			return nil
 		}
@@ -112,14 +112,14 @@ func (f *FC) Close() error {
 
 func (f *FC) updateInfo() {
 	// Send commands to print FC info
-	f.msp.WriteCmd(_msp.MspAPIVersion)
-	f.msp.WriteCmd(_msp.MspFCVariant)
-	f.msp.WriteCmd(_msp.MspFCVersion)
-	f.msp.WriteCmd(_msp.MspBoardInfo)
-	f.msp.WriteCmd(_msp.MspBuildInfo)
-	f.msp.WriteCmd(_msp.MspFeature)
-	f.msp.WriteCmd(_msp.MspCFSerialConfig)
-	f.msp.WriteCmd(_msp.MspRXMap)
+	f.msp.WriteCmd(msp.MspAPIVersion)
+	f.msp.WriteCmd(msp.MspFCVariant)
+	f.msp.WriteCmd(msp.MspFCVersion)
+	f.msp.WriteCmd(msp.MspBoardInfo)
+	f.msp.WriteCmd(msp.MspBuildInfo)
+	f.msp.WriteCmd(msp.MspFeature)
+	f.msp.WriteCmd(msp.MspCFSerialConfig)
+	f.msp.WriteCmd(msp.MspRXMap)
 }
 
 func (f *FC) printf(format string, a ...interface{}) (int, error) {
@@ -136,19 +136,19 @@ func (f *FC) printInfo() {
 	}
 }
 
-func (f *FC) handleFrame(fr *_msp.MSPFrame, w interface{}) error {
+func (f *FC) handleFrame(fr *msp.MSPFrame, w interface{}) error {
 	switch fr.Code {
-	case _msp.MspAPIVersion:
+	case msp.MspAPIVersion:
 		f.printf("MSP API version %d.%d (protocol %d)\n", fr.Byte(1), fr.Byte(2), fr.Byte(0))
-	case _msp.MspFCVariant:
+	case msp.MspFCVariant:
 		f.variant = string(fr.Payload)
 		f.printInfo()
-	case _msp.MspFCVersion:
+	case msp.MspFCVersion:
 		f.versionMajor = fr.Byte(0)
 		f.versionMinor = fr.Byte(1)
 		f.versionPatch = fr.Byte(2)
 		f.printInfo()
-	case _msp.MspBoardInfo:
+	case msp.MspBoardInfo:
 		// BoardID is always 4 characters
 		f.boardID = string(fr.Payload[:4])
 		// Then 4 bytes follow, HW revision (uint16), builtin OSD type (uint8) and wether
@@ -162,26 +162,26 @@ func (f *FC) handleFrame(fr *_msp.MSPFrame, w interface{}) error {
 			}
 		}
 		f.printInfo()
-	case _msp.MspBuildInfo:
+	case msp.MspBuildInfo:
 		buildDate := string(fr.Payload[:11])
 		buildTime := string(fr.Payload[11:19])
 		// XXX: Revision is 8 characters in iNav but 7 in BF/CF
 		rev := string(fr.Payload[19:])
 		f.printf("Build %s (built on %s @ %s)\n", rev, buildDate, buildTime)
-	case _msp.MspFeature:
+	case msp.MspFeature:
 		fr.Read(&f.Features)
-		if (f.Features&_msp.MspFCFeatureDebugTrace == 0) && f.shouldEnableDebugTrace() {
+		if (f.Features&msp.MspFCFeatureDebugTrace == 0) && f.shouldEnableDebugTrace() {
 			f.printf("Enabling FEATURE_DEBUG_TRACE\n")
-			f.Features |= _msp.MspFCFeatureDebugTrace
-			f.msp.WriteCmd(_msp.MspSetFeature, f.Features)
-			f.msp.WriteCmd(_msp.MspEepromWrite)
+			f.Features |= msp.MspFCFeatureDebugTrace
+			f.msp.WriteCmd(msp.MspSetFeature, f.Features)
+			f.msp.WriteCmd(msp.MspEepromWrite)
 		}
-	case _msp.MspCFSerialConfig:
+	case msp.MspCFSerialConfig:
 		if f.shouldEnableDebugTrace() {
-			var cfg _msp.MSPSerialConfig
-			var serialConfigs []_msp.MSPSerialConfig
+			var cfg msp.MSPSerialConfig
+			var serialConfigs []msp.MSPSerialConfig
 			hasDebugTraceMSPPort := false
-			mask := uint16(_msp.SerialFunctionMSP | _msp.SerialFunctionDebugTrace)
+			mask := uint16(msp.SerialFunctionMSP | msp.SerialFunctionDebugTrace)
 			for {
 				err := fr.Read(&cfg)
 				if err != nil {
@@ -200,34 +200,34 @@ func (f *FC) handleFrame(fr *_msp.MSPFrame, w interface{}) error {
 				// Enable DEBUG_TRACE on the first MSP port, since DEBUG_TRACE only
 				// works on one port.
 				for ii := range serialConfigs {
-					if serialConfigs[ii].FunctionMask&_msp.SerialFunctionMSP != 0 {
+					if serialConfigs[ii].FunctionMask&msp.SerialFunctionMSP != 0 {
 						f.printf("Enabling FUNCTION_DEBUG_TRACE on serial port %v\n", serialConfigs[ii].Identifier)
-						serialConfigs[ii].FunctionMask |= _msp.SerialFunctionDebugTrace
+						serialConfigs[ii].FunctionMask |= msp.SerialFunctionDebugTrace
 						break
 					}
 				}
 				// Save ports
-				f.msp.WriteCmd(_msp.MspSetCFSerialConfig, serialConfigs)
-				f.msp.WriteCmd(_msp.MspEepromWrite)
+				f.msp.WriteCmd(msp.MspSetCFSerialConfig, serialConfigs)
+				f.msp.WriteCmd(msp.MspEepromWrite)
 			}
 		}
-	case _msp.MspRXMap:
+	case msp.MspRXMap:
 		f.channelMap = make([]uint8, 8)
 		if err := fr.Read(f.channelMap); err != nil {
 			return err
 		}
-	case _msp.MspReboot:
+	case msp.MspReboot:
 		f.printf("Rebooting board...\n")
-	case _msp.MspDebugMsg:
+	case msp.MspDebugMsg:
 		s := strings.Trim(string(fr.Payload), " \r\n\t\x00")
 		f.printf("[DEBUG] %s\n", s)
-	case _msp.MspSetFeature:
-	case _msp.MspSetCFSerialConfig:
-	case _msp.MspSetRawRC:
-	case _msp.MspEepromWrite:
-	case _msp.MspSetPID:
+	case msp.MspSetFeature:
+	case msp.MspSetCFSerialConfig:
+	case msp.MspSetRawRC:
+	case msp.MspEepromWrite:
+	case msp.MspSetPID:
 		// Nothing to do for these
-	case _msp.MspPID:
+	case msp.MspPID:
 		pidMap := make([]uint8, 30)
 		if err := fr.Read(pidMap); err != nil {
 			return err
@@ -277,7 +277,7 @@ func (f *FC) shouldEnableDebugTrace() bool {
 
 // Reboot reboots the board via MSP_REBOOT
 func (f *FC) Reboot() {
-	f.msp.WriteCmd(_msp.MspReboot)
+	f.msp.WriteCmd(msp.MspReboot)
 }
 
 // StartUpdating starts reading from the MSP port and handling
@@ -293,7 +293,7 @@ func (f *FC) StartUpdating(w interface{}) {
 				}
 				continue
 			}
-			if merr, ok := err.(_msp.MSPError); ok && merr.IsMSPError() {
+			if merr, ok := err.(msp.MSPError); ok && merr.IsMSPError() {
 				f.printf("%v\n", err)
 				continue
 			}
@@ -392,11 +392,11 @@ func (f *FC) ToggleRXSimulation() (enabled bool, err error) {
 		go func(t *time.Ticker) {
 			for range t.C {
 				f.sticks.Update()
-				msp := f.msp
-				if msp == nil {
+				m := f.msp
+				if m == nil {
 					continue
 				}
-				msp.WriteCmd(_msp.MspSetRawRC, f.sticks.ToMSP(f.channelMap))
+				m.WriteCmd(msp.MspSetRawRC, f.sticks.ToMSP(f.channelMap))
 			}
 		}(f.rxTicker)
 		enabled = true
@@ -405,14 +405,14 @@ func (f *FC) ToggleRXSimulation() (enabled bool, err error) {
 }
 
 func (f *FC) GetPIDs() (err error) {
-	f.msp.WriteCmd(_msp.MspPID)
+	f.msp.WriteCmd(msp.MspPID)
 
 	return err
 }
 
 func (f *FC) SetPIDs(pids []uint8) (err error) {
-	f.msp.WriteCmd(_msp.MspSetPID, pids)
-	f.msp.WriteCmd(_msp.MspEepromWrite)
+	f.msp.WriteCmd(msp.MspSetPID, pids)
+	f.msp.WriteCmd(msp.MspEepromWrite)
 
 	return err
 }

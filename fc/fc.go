@@ -65,7 +65,7 @@ func (f *FCOptions) stderr() io.Writer {
 // NewFC returns a new FC using the given port and baud rate. stdout is
 // optional and will default to os.Stdout if nil
 func NewFC(opts FCOptions) (*FC, error) {
-	m, err := msp.NewMSP(opts.PortName, opts.BaudRate)
+	m, err := msp.New(opts.PortName, opts.BaudRate)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (f *FC) reconnect() error {
 		// Trying to connect on macOS when the port dev file is
 		// not present would cause an USB hub reset.
 		if f.portIsPresent() {
-			m, err := msp.NewMSP(f.opts.PortName, f.opts.BaudRate)
+			m, err := msp.New(f.opts.PortName, f.opts.BaudRate)
 			if err == nil {
 				f.printf("Reconnected to %s @ %dbps\n", f.opts.PortName, f.opts.BaudRate)
 				f.reset()
@@ -289,7 +289,7 @@ func (f *FC) prepareToReboot(fn func(m *msp.MSP) error) error {
 	f.msp = nil
 	m.Close()
 	time.Sleep(time.Second)
-	mm, err := msp.NewMSP(f.opts.PortName, f.opts.BaudRate)
+	mm, err := msp.New(f.opts.PortName, f.opts.BaudRate)
 	if err != nil {
 		return err
 	}

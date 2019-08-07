@@ -203,7 +203,7 @@ func (e *mspOOBErr) Error() string {
 	return fmt.Sprintf("out of band MSP byte 0x%02x", e.b)
 }
 
-func NewMSP(portName string, baudRate int) (*MSP, error) {
+func New(portName string, baudRate int) (*MSP, error) {
 	opts := &serial.Config{
 		Name: portName,
 		Baud: baudRate,

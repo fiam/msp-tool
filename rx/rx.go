@@ -18,7 +18,8 @@ const (
 type RXKey uint8
 
 // RX keys. WASD controls left stick while
-// the arrows control the right one
+// the arrows control the right one. Numbers
+// 1-0 control channels 5-14
 const (
 	RXKeyW RXKey = iota
 	RXKeyA
@@ -28,7 +29,20 @@ const (
 	RXKeyLeft
 	RXKeyDown
 	RXKeyRight
+
+	RXKey1
+	RXKey2
+	RXKey3
+	RXKey4
+	RXKey5
+	RXKey6
+	RXKey7
+	RXKey8
+	RXKey9
+	RXKey0
 )
+
+const rxKeyCount = RXKey0 + 1
 
 type RX interface {
 	Keypress(key RXKey)
@@ -39,8 +53,19 @@ type RxSticks struct {
 	Pitch     uint16
 	Yaw       uint16
 	Throttle  uint16
+	Channels  [14]uint16 // Channels 5-18
 	mu        sync.Mutex
-	lastPress [8]time.Time
+	lastPress [rxKeyCount]time.Time
+}
+
+func (r *RxSticks) Reset() {
+	r.Roll = RxMid
+	r.Pitch = RxMid
+	r.Yaw = RxMid
+	r.Throttle = RxLow
+	for ii := range r.Channels {
+		r.Channels[ii] = RxLow
+	}
 }
 
 func (r *RxSticks) ToMSP(channelMap []uint8) rxPayload {
@@ -51,6 +76,7 @@ func (r *RxSticks) ToMSP(channelMap []uint8) rxPayload {
 	channels[channelMap[1]] = r.Pitch
 	channels[channelMap[2]] = r.Yaw
 	channels[channelMap[3]] = r.Throttle
+	channels = append(channels, r.Channels[:]...)
 	return rxPayload{
 		Channels: channels,
 	}
@@ -84,6 +110,27 @@ func (r *RxSticks) Keypress(key RXKey) {
 	case RXKeyRight:
 		r.Roll = RxHigh
 		r.lastPress[RXKeyRight] = time.Time{}
+	case RXKey1:
+		r.switchChannel(5)
+	case RXKey2:
+		r.switchChannel(6)
+	case RXKey3:
+		r.switchChannel(7)
+	case RXKey4:
+		r.switchChannel(8)
+	case RXKey5:
+		r.switchChannel(9)
+	case RXKey6:
+		r.switchChannel(10)
+	case RXKey7:
+		r.switchChannel(11)
+	case RXKey8:
+		r.switchChannel(12)
+	case RXKey9:
+		r.switchChannel(13)
+	case RXKey0:
+		r.switchChannel(14)
+
 	}
 	r.lastPress[key] = time.Now()
 }
@@ -108,6 +155,17 @@ func (r *RxSticks) Update() {
 			case RXKeyLeft, RXKeyRight:
 				r.Roll = RxMid
 			}
+		}
+	}
+}
+
+func (r *RxSticks) switchChannel(ch int) {
+	idx := ch - 5
+	if idx >= 0 && idx < len(r.Channels) {
+		if r.Channels[idx] == RxLow {
+			r.Channels[idx] = RxHigh
+		} else {
+			r.Channels[idx] = RxLow
 		}
 	}
 }

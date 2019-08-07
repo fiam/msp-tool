@@ -132,6 +132,27 @@ func handleRXSimulation(fc *fc.FC, key byte) bool {
 		rxKey = rx.RXKeyDown
 	case kmArrowRight:
 		rxKey = rx.RXKeyRight
+	case '1':
+		rxKey = rx.RXKey1
+	case '2':
+		rxKey = rx.RXKey2
+	case '3':
+		rxKey = rx.RXKey3
+	case '4':
+		rxKey = rx.RXKey4
+	case '5':
+		rxKey = rx.RXKey5
+	case '6':
+		rxKey = rx.RXKey6
+	case '7':
+		rxKey = rx.RXKey7
+	case '8':
+		rxKey = rx.RXKey8
+	case '9':
+		rxKey = rx.RXKey9
+	case '0':
+		rxKey = rx.RXKey0
+
 	default:
 		return false
 	}

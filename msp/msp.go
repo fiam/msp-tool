@@ -337,9 +337,13 @@ func (m *MSP) readMSPV2Frame() (*MSPFrame, error) {
 }
 
 func (m *MSP) ReadFrame() (*MSPFrame, error) {
+	port := m.port
+	if port == nil {
+		return nil, io.EOF
+	}
 	buf := make([]byte, 1)
 	for {
-		_, err := m.port.Read(buf)
+		_, err := port.Read(buf)
 		if err != nil {
 			return nil, err
 		}
@@ -349,7 +353,7 @@ func (m *MSP) ReadFrame() (*MSPFrame, error) {
 		}
 		return nil, &mspOOBErr{b: buf[0]}
 	}
-	_, err := m.port.Read(buf)
+	_, err := port.Read(buf)
 	if err != nil {
 		return nil, err
 	}

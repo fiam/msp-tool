@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -86,13 +87,17 @@ func (f *FC) reconnect() error {
 		f.msp = nil
 	}
 	for {
-		m, err := msp.NewMSP(f.opts.PortName, f.opts.BaudRate)
-		if err == nil {
-			f.printf("Reconnected to %s @ %dbps\n", f.opts.PortName, f.opts.BaudRate)
-			f.reset()
-			f.msp = m
-			f.updateInfo()
-			return nil
+		// Trying to connect on macOS when the port dev file is
+		// not present would cause an USB hub reset.
+		if f.portIsPresent() {
+			m, err := msp.NewMSP(f.opts.PortName, f.opts.BaudRate)
+			if err == nil {
+				f.printf("Reconnected to %s @ %dbps\n", f.opts.PortName, f.opts.BaudRate)
+				f.reset()
+				f.msp = m
+				f.updateInfo()
+				return nil
+			}
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -275,29 +280,89 @@ func (f *FC) shouldEnableDebugTrace() bool {
 	return f.opts.EnableDebugTrace && f.variant == "INAV" && f.versionGte(1, 9, 0)
 }
 
+func (f *FC) prepareToReboot(fn func(m *msp.MSP) error) error {
+	// We want to avoid an EOF from the uart at all costs,
+	// so close the current port and open another one to ensure
+	// the goroutine reading from the port stops even if the
+	// board reboots very fast.
+	m := f.msp
+	f.msp = nil
+	m.Close()
+	time.Sleep(time.Second)
+	mm, err := msp.NewMSP(f.opts.PortName, f.opts.BaudRate)
+	if err != nil {
+		return err
+	}
+	err = fn(mm)
+	mm.Close()
+	return err
+}
+
 // Reboot reboots the board via MSP_REBOOT
 func (f *FC) Reboot() {
-	f.msp.WriteCmd(msp.MspReboot)
+	f.prepareToReboot(func(m *msp.MSP) error {
+		m.WriteCmd(msp.MspReboot)
+		return nil
+	})
+}
+
+func (f *FC) unwrapError(err error) error {
+	if pe, ok := err.(*os.PathError); ok {
+		return pe.Err
+	}
+	return err
+}
+
+func (f *FC) portIsPresent() bool {
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	_, err := os.Stat(f.opts.PortName)
+	return err == nil
 }
 
 // StartUpdating starts reading from the MSP port and handling
 // the received messages. Note that it never returns.
 func (f *FC) StartUpdating(w interface{}) {
 	for {
-		frame, err := f.msp.ReadFrame()
+		var frame *msp.MSPFrame
+		var err error
+		m := f.msp
+		if m != nil {
+			frame, err = m.ReadFrame()
+		} else {
+			// f.msp was intentionally set to nil because the board
+			// was rebooted. Assume a disconnection. Note that we can't
+			// rely just on EOF detection because in some cases
+			// (e.g. macOS with STM32 VCP uart) reading from the uart
+			// until EOF will cause a USB reset, affecting other devices
+			// connected to the same hub. Assign err to os.ErrClosed
+			// to apply the same logic for port detection than the
+			// path that handles a closed port.
+			err = os.ErrClosed
+		}
 		if err != nil {
-			if err == io.EOF {
-				f.printf("Board disconnected, trying to reconnect...\n")
-				if err := f.reconnect(); err != nil {
-					panic(err)
-				}
-				continue
-			}
 			if merr, ok := err.(msp.MSPError); ok && merr.IsMSPError() {
 				f.printf("%v\n", err)
 				continue
 			}
-			panic(err)
+			uerr := f.unwrapError(err)
+			f.printf("Board disconnected (%v), trying to reconnect...\n", uerr)
+			if uerr == os.ErrClosed {
+				time.Sleep(time.Second)
+				// Wait for the port to go away or a 5s timeout
+				timeout := time.Now().Add(5 * time.Second)
+				for f.portIsPresent() {
+					if timeout.Before(time.Now()) {
+						break
+					}
+				}
+			}
+			if err := f.reconnect(); err != nil {
+				panic(err)
+			}
+			f.printf("Reconnected...\n")
+			continue
 		}
 		f.handleFrame(frame, w)
 	}
@@ -423,8 +488,10 @@ func (f *FC) RX() rx.RX {
 
 // Reboots the board into the bootloader for flashing
 func (f *FC) dfuReboot() error {
-	_, err := f.msp.RebootIntoBootloader()
-	return err
+	return f.prepareToReboot(func(m *msp.MSP) error {
+		_, err := m.RebootIntoBootloader()
+		return err
+	})
 }
 
 func (f *FC) dfuList(dfuPath string) ([]string, error) {
